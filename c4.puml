@@ -1,0 +1,70 @@
+@startuml
+!include <C4/C4_Container>
+
+title Маркетплейс (C4 Container)
+
+Person(buyer, "Покупатель", "смотрит ленту, покупает")
+Person(seller, "Продавец", "выставляет товары")
+
+System_Ext(psp, "Платежный провайдер", "страница оплаты, данные карт хранятся у него")
+System_Ext(send, "Сервисы рассылок", "почта, смс, пуш")
+
+System_Boundary(mp, "Маркетплейс") {
+  Container(front, "Фронт", "React", "сайт для покупателя и кабинет продавца")
+  Container(gw, "API Gateway", "Envoy", "все запросы снаружи, проверка токена")
+
+  Container(user, "user-service", "Python", "регистрация, вход, профили")
+  ContainerDb(userdb, "user db", "PostgreSQL")
+
+    Container(catalog, "catalog-service", "Python", "товары, цены, остатки")
+    ContainerDb(catalogdb, "catalog db", "PostgreSQL")
+
+  Container(feed, "feed-service", "Python", "персональная лента")
+  ContainerDb(feeddb, "feed db", "PostgreSQL")
+  ContainerDb(redis, "feed cache", "Redis", "готовые ленты")
+
+  Container(order, "order-service", "Python", "корзина, заказы, статусы")
+  ContainerDb(orderdb, "order db", "PostgreSQL")
+
+  Container(pay, "payment-service", "Python", "оплата, учет платежей, выплаты продавцам")
+  ContainerDb(paydb, "payment db", "PostgreSQL")
+
+  Container(notif, "notification-service", "Python", "уведомления о статусах заказа")
+  ContainerDb(notifdb, "notification db", "PostgreSQL")
+
+  ContainerQueue(kafka, "Kafka", "Kafka", "события")
+}
+
+Rel(buyer, front, "пользуется")
+Rel(seller, front, "пользуется")
+Rel(front, gw, "запросы", "HTTPS")
+
+Rel(gw, user, "вход, профиль", "REST")
+Rel(gw, catalog, "товары", "REST")
+Rel(gw, feed, "лента", "REST")
+Rel(gw, order, "корзина, заказы", "REST")
+Rel(gw, pay, "платежи", "REST")
+
+Rel(order, catalog, "цены, резерв", "REST")
+Rel(order, pay, "создать платеж, возврат", "REST")
+Rel(notif, user, "контакты", "REST")
+Rel(pay, psp, "платежи, выплаты", "HTTPS")
+Rel(psp, pay, "результат оплаты", "webhook")
+Rel(notif, send, "отправка", "HTTPS")
+
+Rel(user, userdb, "читает/пишет")
+Rel(catalog, catalogdb, "читает/пишет")
+Rel(feed, feeddb, "читает/пишет")
+Rel(feed, redis, "готовые ленты")
+Rel(order, orderdb, "читает/пишет")
+Rel(pay, paydb, "читает/пишет")
+Rel(notif, notifdb, "читает/пишет")
+
+Rel(catalog, kafka, "пишет ProductChanged, читает OrderStatusChanged", "async")
+Rel(order, kafka, "пишет OrderStatusChanged, читает PaymentStatusChanged", "async")
+Rel(pay, kafka, "пишет PaymentStatusChanged", "async")
+Rel(feed, kafka, "читает ProductChanged, OrderStatusChanged", "async")
+Rel(notif, kafka, "читает OrderStatusChanged", "async")
+
+SHOW_LEGEND()
+@enduml
